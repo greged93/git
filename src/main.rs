@@ -42,7 +42,6 @@ fn main() -> eyre::Result<()> {
             // Read the file and start the decoder
             let path = format!(".git/objects/{}/{}", &sha[..2], &sha[2..]);
             let compressed = fs::read(path)?;
-            dbg!(compressed.len());
             let mut decoder = flate2::read::ZlibDecoder::new(&compressed[..]);
 
             // Decode the compressed file to a string
