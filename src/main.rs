@@ -2,7 +2,6 @@ use clap::{Parser, Subcommand};
 use eyre::eyre;
 use std::fs;
 use std::io::Read;
-use std::path::PathBuf;
 
 #[derive(Parser)]
 pub struct Args {
@@ -14,8 +13,8 @@ pub struct Args {
 pub enum Command {
     Init,
     CatFile {
-        #[clap(short, long)]
-        path: PathBuf,
+        #[clap(short = 'p', long = "path")]
+        sha: String,
     },
 }
 
@@ -33,8 +32,9 @@ fn main() -> eyre::Result<()> {
             println!("Initialized git directory");
             Ok(())
         }
-        Command::CatFile { path } => {
+        Command::CatFile { sha } => {
             // Read the file and start the decoder
+            let path = format!(".git/objects/{}/{}", &sha[..2], &sha[2..]);
             let compressed = fs::read(path)?;
             let mut decoder = flate2::read::ZlibDecoder::new(&compressed[..]);
 
