@@ -1,8 +1,8 @@
+mod git;
+
+use crate::git::GitFile;
 use clap::{Parser, Subcommand};
-use eyre::eyre;
-use sha1::Digest;
 use std::fs;
-use std::io::{Read, Write};
 use std::path::PathBuf;
 
 #[derive(Parser)]
@@ -14,6 +14,7 @@ pub struct Args {
 #[derive(Subcommand)]
 pub enum Command {
     Init,
+    // Reads the content of the file at sha
     CatFile {
         #[clap(short = 'p', long = "path")]
         sha: String,
@@ -21,6 +22,11 @@ pub enum Command {
     HashObject {
         #[clap(short = 'w', long = "write")]
         path: PathBuf,
+    },
+    LsTree {
+        #[clap(long)]
+        name_only: bool,
+        sha: String,
     },
 }
 
@@ -40,38 +46,20 @@ fn main() -> eyre::Result<()> {
         }
         Command::CatFile { sha } => {
             // Read the file and start the decoder
-            let path = format!(".git/objects/{}/{}", &sha[..2], &sha[2..]);
-            let compressed = fs::read(path)?;
-            let mut decoder = flate2::read::ZlibDecoder::new(&compressed[..]);
+            let git_file = GitFile::new(sha)?;
 
-            // Decode the compressed file to a string
-            let mut s = String::new();
-            decoder.read_to_string(&mut s)?;
-
-            // Read the length
-            let zero_byte_pos = s.find('\0').ok_or(eyre!("missing \0 byte"))?;
-            let content = &s[zero_byte_pos + 1..];
-
-            print!("{}", content);
-
+            print!("{}", git_file);
             Ok(())
         }
         Command::HashObject { path } => {
-            // Create the object input
-            let content = fs::read(path)?;
-            let header = format!("blob {}\0", content.len());
-            let object = [header.as_bytes(), &content].concat();
+            // Read the file at the given path
+            let file = GitFile::from_file(path)?;
 
-            // Compute the hash of the object
-            let mut hasher = sha1::Sha1::new();
-            hasher.update(&object);
-            let hash = hasher.finalize();
-            let hash = hex::encode(hash.as_slice());
+            // Get the hash
+            let hash = hex::encode(file.hash());
 
-            // Compress the object
-            let mut encoder = flate2::write::ZlibEncoder::new(Vec::new(), Default::default());
-            encoder.write_all(&object)?;
-            let compressed = encoder.finish()?;
+            // Compress the file
+            let compressed = file.compress()?;
 
             // Write the compressed data to output
             let base_path = format!(".git/objects/{}", &hash[..2]);
@@ -80,6 +68,12 @@ fn main() -> eyre::Result<()> {
             fs::write(output_path, compressed)?;
 
             print!("{}", hash);
+            Ok(())
+        }
+        Command::LsTree { sha, .. } => {
+            let file = GitFile::new(sha)?;
+
+            print!("{}", file);
             Ok(())
         }
     }
