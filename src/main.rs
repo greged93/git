@@ -28,6 +28,7 @@ pub enum Command {
         name_only: bool,
         sha: String,
     },
+    WriteTree,
 }
 
 fn main() -> eyre::Result<()> {
@@ -74,6 +75,19 @@ fn main() -> eyre::Result<()> {
             let file = GitFile::new(sha)?;
 
             print!("{}", file);
+            Ok(())
+        }
+        Command::WriteTree => {
+            let file = GitFile::from_directory(PathBuf::from("."))?;
+
+            // Write the compressed data to output
+            let hash = hex::encode(&file.sha);
+            let base_path = format!(".git/objects/{}", &hash[..2]);
+            let output_path = format!("{}/{}", base_path, &hash[2..]);
+            let _ = fs::create_dir(base_path);
+            fs::write(output_path, file.compress()?)?;
+
+            println!("{}", hash);
             Ok(())
         }
     }
