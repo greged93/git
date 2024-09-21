@@ -2,7 +2,9 @@ mod git;
 
 use crate::git::GitFile;
 use clap::{Parser, Subcommand};
+use sha1::Digest;
 use std::fs;
+use std::io::Write;
 use std::path::PathBuf;
 
 #[derive(Parser)]
@@ -29,6 +31,13 @@ pub enum Command {
         sha: String,
     },
     WriteTree,
+    CommitTree {
+        tree_sha: String,
+        #[clap(short)]
+        parent_sha: String,
+        #[clap(short)]
+        message: String,
+    },
 }
 
 fn main() -> eyre::Result<()> {
@@ -88,6 +97,40 @@ fn main() -> eyre::Result<()> {
             fs::write(output_path, file.compress()?)?;
 
             println!("{}", hash);
+            Ok(())
+        }
+        Command::CommitTree {
+            parent_sha,
+            message,
+            tree_sha,
+        } => {
+            let content = format!(
+                "tree {tree_sha}\nparent {parent_sha}\nauthor Greg <greg@notyourbusiness.com +0000\n\n{message}\n"
+            );
+            let content = content.as_bytes();
+            let header = format!("commit {}\0", content.len());
+
+            let commit = [header.as_bytes(), content].concat();
+
+            // Hash the git file
+            let mut hasher = sha1::Sha1::new();
+            hasher.update(&commit);
+            let hash = hasher.finalize();
+            let hash = hex::encode(hash);
+
+            // Compress the file
+            let mut encoder = flate2::write::ZlibEncoder::new(Vec::new(), Default::default());
+
+            encoder.write_all(&commit)?;
+            let content = encoder.finish()?;
+
+            let base_path = format!(".git/objects/{}", &hash[..2]);
+            let output_path = format!("{}/{}", base_path, &hash[2..]);
+            let _ = fs::create_dir(base_path);
+            fs::write(output_path, content)?;
+
+            println!("{}", hash);
+
             Ok(())
         }
     }
